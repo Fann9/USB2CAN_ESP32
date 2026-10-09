@@ -185,6 +185,10 @@ typedef struct {
 #endif
 } ctshell_ctx_t;
 
+#ifdef CONFIG_CTSHELL_USE_FS
+void ctshell_fs_init(ctshell_ctx_t *ctx, const ctshell_fs_drv_t *drv);
+#endif
+
 typedef enum {
     CTSHELL_ATTR_NONE   = 0,
     CTSHELL_ATTR_MENU   = (1 << 0),

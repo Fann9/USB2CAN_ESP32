@@ -1,6 +1,8 @@
 #include "serial_shell.h"
 #include "shell_input.h"
 #include "app_info.h"
+#include "flash_files.h"
+#include "can_bus.h"
 
 #include "driver/uart.h"
 #include "driver/uart_vfs.h"
@@ -14,10 +16,32 @@
 #error "USB2CAN shell requires the UART console"
 #endif
 
-enum { SHELL_CORE = 0, SHELL_STACK_BYTES = 6144, SHELL_PRIORITY = 4 };
+enum { SHELL_CORE = 0, SHELL_STACK_BYTES = 8192, SHELL_PRIORITY = 4 };
 static ctshell_ctx_t shell_ctx;
 static TaskHandle_t shell_task_handle;
 static const uart_port_t shell_uart = CONFIG_ESP_CONSOLE_UART_NUM;
+static bool echo_active;
+
+bool serial_shell_can_echo(uint16_t id)
+{
+    if (!can_bus_echo_start(id)) return false;
+    echo_active=true;
+    ctshell_printf("Streaming /0x%03X; press Ctrl+C to stop\r\n",id);
+    return true;
+}
+
+static void print_echo_frames(void)
+{
+    twai_message_t frame;
+    for (unsigned n=0;n<8 && can_bus_echo_receive(&frame);++n) {
+        ctshell_printf("STD ID 0x%08lX DLC %u",(unsigned long)frame.identifier,
+            frame.data_length_code);
+        if (frame.rtr) ctshell_printf(" RTR");
+        else for (unsigned i=0;i<frame.data_length_code && i<8;++i)
+            ctshell_printf(" %02X",frame.data[i]);
+        ctshell_printf("\r\n");
+    }
+}
 
 static const char startup_banner[] =
     "\r\n"
@@ -68,12 +92,14 @@ static void shell_task(void *arg)
 
     const ctshell_io_t io = { .write = shell_write, .get_tick = shell_ticks };
     ctshell_init(&shell_ctx, io, NULL);
+    flash_files_attach(&shell_ctx);
     shell_input_t input = { .ctx = &shell_ctx };
     uart_event_t event;
     uint8_t data[64];
 
     while (true) {
-        if (xQueueReceive(events, &event, portMAX_DELAY) != pdTRUE) {
+        if (xQueueReceive(events, &event, echo_active ? pdMS_TO_TICKS(10) : portMAX_DELAY) != pdTRUE) {
+            if (echo_active) print_echo_frames();
             continue;
         }
         if (event.type == UART_DATA) {
@@ -86,16 +112,32 @@ static void shell_task(void *arg)
                 }
                 remaining -= (size_t)received;
                 for (int i = 0; i < received; ++i) {
+                    if (echo_active) {
+                        if (data[i]==CTSHELL_KEY_CTRL_C) {
+                            echo_active=false;
+                            can_bus_echo_stop();
+                            ctshell_printf("\r\nEcho stopped; dropped %lu frame(s)\r\n",
+                                (unsigned long)can_bus_echo_dropped());
+                            shell_input_cancel(&input);
+                            /* Ignore bytes following Ctrl+C in this UART chunk. */
+                            remaining=0;
+                            break;
+                        }
+                        continue;
+                    }
                     shell_input_feed(&input, data[i]);
+                    if (echo_active) ctshell_printf("\r\033[2K");
                 }
             }
         } else if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL ||
                    event.type == UART_PARITY_ERR || event.type == UART_FRAME_ERR) {
             ESP_ERROR_CHECK(uart_flush_input(shell_uart));
             xQueueReset(events);
+            if (echo_active) { echo_active=false; can_bus_echo_stop(); }
             ctshell_printf("\r\nUART receive error; input discarded.\r\n");
             shell_input_cancel(&input);
         }
+        if (echo_active) print_echo_frames();
     }
 }
 

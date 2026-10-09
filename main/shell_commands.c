@@ -1,5 +1,6 @@
 #include <inttypes.h>
 #include "app_info.h"
+#include "can_bus.h"
 #include "ctshell.h"
 #include "esp_chip_info.h"
 #include "esp_system.h"
@@ -48,7 +49,7 @@ static int command_info(int argc, char *argv[])
     ctshell_printf("Uptime: %" PRIi64 " ms\r\n", esp_timer_get_time() / 1000);
     ctshell_printf("Free heap: %" PRIu32 " bytes\r\n", esp_get_free_heap_size());
     ctshell_printf("Minimum free heap: %" PRIu32 " bytes\r\n", esp_get_minimum_free_heap_size());
-    ctshell_printf("CAN: not initialized (external transceiver required)\r\n");
+    ctshell_printf("CAN: TWAI %s, worker core 1\r\n",can_bus_running()?"running":"stopped");
     return 0;
 }
 CTSHELL_EXPORT_SUBCMD(sys, info, command_info, "Show CPU, uptime and heap usage");

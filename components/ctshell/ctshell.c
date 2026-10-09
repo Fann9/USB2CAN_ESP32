@@ -822,19 +822,21 @@ static int cmd_echo(int argc, char *argv[]) {
         ctshell_printf("echo: cannot open file '%s'\r\n", path);
         return 0;
     }
+    int failed = 0;
     if (append_mode && g_ctshell_ctx->fs_drv->lseek) {
-        g_ctshell_ctx->fs_drv->lseek(fd, 0, SEEK_END);
+        failed = g_ctshell_ctx->fs_drv->lseek(fd, 0, SEEK_END) != 0;
     }
-    for (int i = 1; i < redirect_idx; i++) {
+    for (int i = 1; i < redirect_idx && !failed; i++) {
         const char *str = argv[i];
-        g_ctshell_ctx->fs_drv->write(fd, str, strlen(str));
-        if (i < redirect_idx - 1) {
-            g_ctshell_ctx->fs_drv->write(fd, " ", 1);
+        failed = g_ctshell_ctx->fs_drv->write(fd, str, strlen(str)) != (int)strlen(str);
+        if (i < redirect_idx - 1 && !failed) {
+            failed = g_ctshell_ctx->fs_drv->write(fd, " ", 1) != 1;
         }
     }
-    g_ctshell_ctx->fs_drv->write(fd, "\r\n", 2);
-    g_ctshell_ctx->fs_drv->close(fd);
-    return 0;
+    if (!failed) failed = g_ctshell_ctx->fs_drv->write(fd, "\r\n", 2) != 2;
+    if (g_ctshell_ctx->fs_drv->close(fd) != 0) failed = 1;
+    if (failed) ctshell_printf("echo: write/close failed for '%s'\r\n", path);
+    return failed;
 #endif
 }
 CTSHELL_EXPORT_CMD(echo, cmd_echo, "Echo args to stdout or file", CTSHELL_ATTR_NONE);
@@ -1074,7 +1076,7 @@ static int cmd_touch(int argc, char *argv[]) {
     char path[CONFIG_CTSHELL_FS_PATH_MAX];
     ctshell_fs_resolve_path(g_ctshell_ctx->cwd, argv[1], path, sizeof(path));
 
-    int fd = g_ctshell_ctx->fs_drv->open(path, 1);
+    int fd = g_ctshell_ctx->fs_drv->open(path, CTSHELL_O_APPEND);
     if (fd >= 0) {
         g_ctshell_ctx->fs_drv->close(fd);
     } else {

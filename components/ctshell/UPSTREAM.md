@@ -20,7 +20,12 @@ Local changes:
    declaration. GCC on the host otherwise increases the parent's alignment,
    introducing holes in a table that the library iterates as a packed array.
 
-Select the CUSTOM platform port. Filesystem backends and upstream platform ports
+5. Enabled filesystem commands use the application POSIX/VFS adapter in
+   main/flash_files.c, with ESP-IDF FATFS and wear levelling. Upstream raw FatFs
+   mounting is not used. echo reports write/close errors; touch does not truncate.
+6. Declared ctshell_fs_init in the public header for application FS adapters.
+
+Select the CUSTOM platform port. Upstream filesystem backends and platform ports
 are not included in this snapshot. Application commands must return promptly;
 long-running work belongs in worker tasks. ctshell_delay is a busy-wait and is
 not used by the application.
