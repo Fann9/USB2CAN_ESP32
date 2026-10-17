@@ -1,7 +1,7 @@
 # USB2CAN
 
 ESP32 / ESP-IDF 工程，已接入 ctshell 串口交互。开机输出
-`AL1S ESP` ASCII 字符画、固件版本和 ctshell 版本，随后显示 `al1s> `。
+`AL1S CAN` ASCII 字符画、固件版本和 ctshell 版本，随后显示 `al1s> `。
 用户可在 `main/app_info.h` 中修改 `USB2CAN_VERSION`，当前为 `V0.0.1`。
 
 ## 编译与串口
@@ -86,6 +86,28 @@ FATFS 不提供完整掉电事务保证，这种备份方案不能保证任意�
 新增 `storage`：偏移 `0x110000`，大小 `0x80000`（512 KiB）。首次升级需要
 **完整执行 `idf.py flash`** 写入新分区表，不能只用 `app-flash`。后续常规烧录
 不覆盖 storage；`erase-flash` 会删除配置。此实现尚未做板上断电/持久化验证。
+
+### 新芯片首次使用时 `ls` 报文件系统未初始化
+
+如果串口显示 `Error: Filesystem not initialized.`，先检查启动日志中的
+`Filesystem:` 行和分区表。若没有 `storage` 分区，执行完整的 `idf.py flash`
+写入分区表；仅烧录 app 不会更新分区表。
+
+这次实际遇到的是分区表已有 `storage`，但启动日志显示
+`f_mount failed ... No filesystem detected` 和 `Filesystem: mount failed (ESP_FAIL)`。
+新分区所在的 Flash 区域含有旧数据，不是全 `0xFF`，因此程序不会自动格式化，
+即使重新完整烧录也不会清除这块区域。如果确认 `storage` 内没有要保留的文件，
+先退出串口监视器（Ctrl+]），然后**只擦除该分区**：
+
+```bash
+python -m esptool --chip esp32 -p /dev/实际串口 erase-region 0x110000 0x80000
+```
+
+此命令会永久删除 `storage` 内的数据，包括已有的 `can.conf`；如需保留，
+应先备份。换芯片或改分区表后，先核对 `partitions.csv` 中的偏移和大小，
+不要照搬擦除地址。擦除后重启，预期看到
+`Filesystem: /flash ready (new partition formatted)`，然后 `ls` 能列出自动创建的
+`can.conf`。不要为此使用 `erase-flash`，它会擦除整片 Flash。
 
 板上验收：查看文件；使用 set 修改 bitrate 为 500000；确认 reload 前 loaded 仍为
 旧值；reload 后确认新值；复位后再次确认；最后恢复 1000000 并 reload。
