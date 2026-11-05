@@ -1,0 +1,2 @@
+__start_ctshell_cmd_section = _ctshell_cmds_start;
+__stop_ctshell_cmd_section = _ctshell_cmds_end;

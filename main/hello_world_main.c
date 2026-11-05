@@ -1,8 +1,13 @@
 /* SPDX-License-Identifier: CC0-1.0 */
 
-#include <stdio.h>
+#include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "serial_shell.h"
 
 void app_main(void)
 {
-    printf("Hello World!\n");
+    ESP_ERROR_CHECK(serial_shell_start());
+    /* Shell owns the console now; avoid a main-task exit log over the prompt. */
+    vTaskDelete(NULL);
 }

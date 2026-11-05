@@ -1,0 +1,13 @@
+[sections:ctshell_cmds]
+entries:
+    ctshell_cmd_section
+
+[scheme:ctshell_default]
+entries:
+    ctshell_cmds -> flash_rodata
+
+[mapping:ctshell]
+archive: *
+entries:
+    * (ctshell_default);
+        ctshell_cmds -> flash_rodata KEEP() SURROUND(ctshell_cmds)
