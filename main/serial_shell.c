@@ -24,11 +24,12 @@ static const uart_port_t shell_uart = CONFIG_ESP_CONSOLE_UART_NUM;
 static bool echo_active;
 static enum { OWNER_UART, OWNER_WIFI } owner=OWNER_UART;
 
-bool serial_shell_can_echo(uint16_t id)
+bool serial_shell_can_echo(uint32_t id)
 {
     if (!can_bus_echo_start(id)) return false;
     echo_active=true;
-    ctshell_printf("Streaming /0x%03X; press Ctrl+C to stop\r\n",id);
+    if (id==UINT32_MAX) ctshell_printf("Streaming all CAN frames; press Ctrl+C to stop\r\n");
+    else ctshell_printf("Streaming /0x%03lX; press Ctrl+C to stop\r\n",(unsigned long)id);
     return true;
 }
 
@@ -36,7 +37,7 @@ static void print_echo_frames(void)
 {
     twai_message_t frame;
     for (unsigned n=0;n<8 && can_bus_echo_receive(&frame);++n) {
-        ctshell_printf("STD ID 0x%08lX DLC %u",(unsigned long)frame.identifier,
+        ctshell_printf("%s ID 0x%08lX DLC %u",frame.extd?"EXT":"STD",(unsigned long)frame.identifier,
             frame.data_length_code);
         if (frame.rtr) ctshell_printf(" RTR");
         else for (unsigned i=0;i<frame.data_length_code && i<8;++i)

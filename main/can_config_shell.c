@@ -9,7 +9,7 @@
 #include "sdkconfig.h"
 
 /* Runs on the shell task and returns when Ctrl+C is received. */
-bool serial_shell_can_echo(uint16_t id);
+bool serial_shell_can_echo(uint32_t id);
 
 /* Shell-task owned until the TWAI worker is introduced. Loaded is a config
  * snapshot, not a claim that a CAN controller is running. */
@@ -226,8 +226,14 @@ static int command_topic(int argc,char **argv)
         ctshell_printf("%u standard CAN topic(s) seen since boot\r\n",topics);
         return 0;
     }
+    if (argc==2 && !strcmp(argv[1],"echo")) {
+        if (!serial_shell_can_echo(UINT32_MAX)) {
+            ctshell_printf("TWAI is not running; cannot echo topic\r\n"); return 1;
+        }
+        return 0;
+    }
     if (argc!=3 || (strcmp(argv[1],"hz") && strcmp(argv[1],"echo")) || argv[2][0]!='/') {
-        ctshell_printf("Usage: can topic list | can topic hz /0x114 | can topic echo /0x114\r\n"); return 1;
+        ctshell_printf("Usage: can topic list | can topic hz /0x114 | can topic echo [/<id>]\r\n"); return 1;
     }
     unsigned id;
     char extra;

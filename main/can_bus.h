@@ -21,7 +21,8 @@ uint32_t can_bus_dropped(void);
 uint32_t can_bus_tx_failed(void);
 bool can_bus_measure_hz(uint16_t id, uint32_t sample_ms, uint32_t *frames);
 uint32_t can_bus_seen_count(uint16_t id);
-bool can_bus_echo_start(uint16_t id);
+/* UINT32_MAX selects every received frame, including extended frames. */
+bool can_bus_echo_start(uint32_t id);
 void can_bus_echo_stop(void);
 bool can_bus_echo_receive(twai_message_t *frame);
 uint32_t can_bus_echo_dropped(void);

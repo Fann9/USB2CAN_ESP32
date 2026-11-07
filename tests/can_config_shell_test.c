@@ -21,8 +21,8 @@ uint32_t can_bus_dropped(void) { return 0; }
 uint32_t can_bus_tx_failed(void) { return 0; }
 bool can_bus_measure_hz(uint16_t id,uint32_t sample_ms,uint32_t *frames) { if (id!=0x114 || sample_ms!=1000) return false; *frames=526; return true; }
 uint32_t can_bus_seen_count(uint16_t id) { return id==0x114 ? 526 : id==0x115 ? 500 : 0; }
-static uint16_t echoed_id;
-bool serial_shell_can_echo(uint16_t id) { echoed_id=id; return true; }
+static uint32_t echoed_id;
+bool serial_shell_can_echo(uint32_t id) { echoed_id=id; return true; }
 static ctshell_ctx_t ctx;
 static shell_input_t input;
 static char output[8192];
@@ -87,6 +87,7 @@ int main(void)
     command("can status"); assert(strstr(output,"TWAI: running"));
     command("can topic hz /0x114"); assert(strstr(output,"526 Hz"));
     command("can topic list"); assert(strstr(output,"/0x114") && strstr(output,"/0x115"));
+    command("can topic echo"); assert(echoed_id==UINT32_MAX);
     command("can topic echo /0x114"); assert(echoed_id==0x114);
     command("can topic echo /0x800"); assert(strstr(output,"Expected topic"));
     command("can topic hz /0x800"); assert(strstr(output,"Expected topic"));

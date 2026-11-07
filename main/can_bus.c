@@ -114,7 +114,9 @@ static void can_worker(void *arg)
             if (twai_receive(&frame,pdMS_TO_TICKS(2))==ESP_OK) {
                 if (!frame.extd && frame.identifier<=0x7ff)
                     __atomic_fetch_add(&standard_counts[frame.identifier],1,__ATOMIC_RELAXED);
-                if (!frame.extd && frame.identifier==__atomic_load_n(&echo_id,__ATOMIC_RELAXED) &&
+                uint32_t selected=__atomic_load_n(&echo_id,__ATOMIC_RELAXED);
+                if ((selected==UINT32_MAX-1 ||
+                     (!frame.extd && frame.identifier==selected)) &&
                     xQueueSend(echo_frames,&frame,0)!=pdTRUE)
                     __atomic_fetch_add(&echo_dropped,1,__ATOMIC_RELAXED);
                 if (xQueueSend(received,&frame,0)!=pdTRUE) ++dropped;
@@ -185,12 +187,12 @@ uint32_t can_bus_seen_count(uint16_t id)
     return id<=0x7ff ? __atomic_load_n(&standard_counts[id],__ATOMIC_RELAXED) : 0;
 }
 
-bool can_bus_echo_start(uint16_t id)
+bool can_bus_echo_start(uint32_t id)
 {
-    if (!running || id>0x7ff || !echo_frames) return false;
+    if (!running || (id>0x7ff && id!=UINT32_MAX) || !echo_frames) return false;
     xQueueReset(echo_frames);
     __atomic_store_n(&echo_dropped,0,__ATOMIC_RELAXED);
-    __atomic_store_n(&echo_id,id,__ATOMIC_RELAXED);
+    __atomic_store_n(&echo_id,id==UINT32_MAX?UINT32_MAX-1:id,__ATOMIC_RELAXED);
     return true;
 }
 

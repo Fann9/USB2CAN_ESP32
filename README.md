@@ -142,6 +142,7 @@ al1s> can status
 al1s> can recv 20
 al1s> can topic hz /0x114
 al1s> can topic list
+al1s> can topic echo
 al1s> can topic echo /0x114
 al1s> can send 0x113 00 00 00 00 00 00 00 00
 al1s> can send 0x113 00 0A 01 A5 5A 00 00 00 --20
@@ -158,10 +159,10 @@ al1s> can reload
 也可查询 `/0x115` 或其他 11 位 ID；采样时 Shell 暂停处理输入，CPU1 仍在收帧。
 频率计数不依赖 `can recv` 缓冲区是否溢出。
 `can topic list` 列出本次启动以来收到过的标准 11 位 CAN ID 及累计帧数。
-`can topic echo /0x114` 持续显示该 ID 的原始帧，按 Ctrl+C 返回提示符。
+`can topic echo` 持续显示所有收到的标准帧和扩展帧；`can topic echo /0x114`
+只显示该标准 ID 的原始帧。按 Ctrl+C 返回提示符。
 Echo 使用独立接收队列，不会取走 `can recv` 的缓存；串口速率不足时会丢帧，
-结束时显示 Echo 丢帧数。当前 topic 命令只支持标准帧 ID；扩展帧仍可通过
-`can recv` 查看。
+结束时显示 Echo 丢帧数。按 ID 过滤和 `hz` 只支持标准帧 ID。
 在末尾加 `--20` 会从本次开始每 20 ms 发送同一帧，周期参数单位为 ms，
 范围为系统 tick（当前 10 ms）到 60000 ms，必须是 tick 的整数倍。
 同一时间只运行一组周期帧；新 `can send` 会取消旧的周期帧，普通单次发送也会取消。
