@@ -3,6 +3,7 @@
 #include "app_info.h"
 #include "flash_files.h"
 #include "can_bus.h"
+#include "wifi_console.h"
 
 #include "driver/uart.h"
 #include "driver/uart_vfs.h"
@@ -21,6 +22,7 @@ static ctshell_ctx_t shell_ctx;
 static TaskHandle_t shell_task_handle;
 static const uart_port_t shell_uart = CONFIG_ESP_CONSOLE_UART_NUM;
 static bool echo_active;
+static enum { OWNER_UART, OWNER_WIFI } owner=OWNER_UART;
 
 bool serial_shell_can_echo(uint16_t id)
 {
@@ -56,6 +58,10 @@ static const char startup_banner[] =
 static void shell_write(const char *data, uint16_t size, void *priv)
 {
     (void)priv;
+    if (owner==OWNER_WIFI) {
+        (void)wifi_console_write(data,size);
+        return;
+    }
     /* TX buffering copies data before ctshell's temporary buffer is released. */
     int written = uart_write_bytes(shell_uart, data, size);
     ESP_ERROR_CHECK(written == size ? ESP_OK : ESP_FAIL);
@@ -64,6 +70,37 @@ static void shell_write(const char *data, uint16_t size, void *priv)
 static uint32_t shell_ticks(void)
 {
     return (uint32_t)(esp_timer_get_time() / 1000ULL);
+}
+
+static void feed_shell_byte(shell_input_t *input,uint8_t byte)
+{
+    if (echo_active) {
+        if (byte==CTSHELL_KEY_CTRL_C) {
+            echo_active=false;
+            can_bus_echo_stop();
+            ctshell_printf("\r\nEcho stopped; dropped %lu frame(s)\r\n",
+                (unsigned long)can_bus_echo_dropped());
+            shell_input_cancel(input);
+        }
+        return;
+    }
+    shell_input_feed(input,byte);
+    if (echo_active) ctshell_printf("\r\033[2K");
+}
+
+static void switch_owner(shell_input_t *input,bool wifi)
+{
+    if (echo_active) { echo_active=false; can_bus_echo_stop(); }
+    owner=wifi ? OWNER_WIFI : OWNER_UART;
+    *input=(shell_input_t){.ctx=&shell_ctx};
+    if (wifi) {
+        (void)wifi_console_write(startup_banner,sizeof(startup_banner)-1);
+    } else {
+        static const char notice[]="\r\nWi-Fi console disconnected.\r\n";
+        (void)uart_write_bytes(shell_uart,notice,sizeof(notice)-1);
+    }
+    ctshell_init(&shell_ctx,(ctshell_io_t){.write=shell_write,.get_tick=shell_ticks},NULL);
+    flash_files_attach(&shell_ctx);
 }
 
 static void shell_task(void *arg)
@@ -98,7 +135,19 @@ static void shell_task(void *arg)
     uint8_t data[64];
 
     while (true) {
-        if (xQueueReceive(events, &event, echo_active ? pdMS_TO_TICKS(10) : portMAX_DELAY) != pdTRUE) {
+        wifi_console_event_t wifi_event;
+        for (unsigned n=0;n<128 && wifi_console_pop_event(&wifi_event);++n) {
+            if (wifi_event.kind==WIFI_CONSOLE_CONNECTED) {
+                switch_owner(&input,true);
+                static const char notice[]="\r\nWi-Fi console connected; Ctrl+C here reclaims UART.\r\n";
+                (void)uart_write_bytes(shell_uart,notice,sizeof(notice)-1);
+            } else if (wifi_event.kind==WIFI_CONSOLE_DISCONNECTED) {
+                if (owner==OWNER_WIFI) switch_owner(&input,false);
+            } else if (owner==OWNER_WIFI) {
+                feed_shell_byte(&input,wifi_event.byte);
+            }
+        }
+        if (xQueueReceive(events, &event, pdMS_TO_TICKS(10)) != pdTRUE) {
             if (echo_active) print_echo_frames();
             continue;
         }
@@ -112,30 +161,19 @@ static void shell_task(void *arg)
                 }
                 remaining -= (size_t)received;
                 for (int i = 0; i < received; ++i) {
-                    if (echo_active) {
-                        if (data[i]==CTSHELL_KEY_CTRL_C) {
-                            echo_active=false;
-                            can_bus_echo_stop();
-                            ctshell_printf("\r\nEcho stopped; dropped %lu frame(s)\r\n",
-                                (unsigned long)can_bus_echo_dropped());
-                            shell_input_cancel(&input);
-                            /* Ignore bytes following Ctrl+C in this UART chunk. */
-                            remaining=0;
-                            break;
-                        }
-                        continue;
-                    }
-                    shell_input_feed(&input, data[i]);
-                    if (echo_active) ctshell_printf("\r\033[2K");
+                    if (owner==OWNER_UART) feed_shell_byte(&input,data[i]);
+                    else if (data[i]==CTSHELL_KEY_CTRL_C) wifi_console_disconnect();
                 }
             }
         } else if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL ||
                    event.type == UART_PARITY_ERR || event.type == UART_FRAME_ERR) {
             ESP_ERROR_CHECK(uart_flush_input(shell_uart));
             xQueueReset(events);
-            if (echo_active) { echo_active=false; can_bus_echo_stop(); }
-            ctshell_printf("\r\nUART receive error; input discarded.\r\n");
-            shell_input_cancel(&input);
+            if (owner==OWNER_UART) {
+                if (echo_active) { echo_active=false; can_bus_echo_stop(); }
+                ctshell_printf("\r\nUART receive error; input discarded.\r\n");
+                shell_input_cancel(&input);
+            }
         }
         if (echo_active) print_echo_frames();
     }

@@ -36,6 +36,25 @@ al1s> echo hello
   `hexdump` 直接读取内存，不可访问的地址会导致异常；日常验证使用以上示例即可。
 - 行长度上限为 127 字符；超长行整行丢弃，不执行截断内容。
 
+## Wi-Fi 控制台
+
+ESP32 启动 WPA2 热点 `AL1S-CAN`，初始密码 `wuhuang1313113`。电脑或手机连接
+该热点后，使用原始 TCP 终端连接端口 `2323`，例如在电脑上运行：
+
+```bash
+nc 192.168.4.1 2323
+```
+
+连接后会显示 `AL1S CAN` 启动字符画和同一个 `al1s> ` 提示符；可直接执行
+`help`、`wifi status`、`can status`、`can topic list` 等命令。热点实际 IP 请以
+串口中的 `wifi status` 为准。此端口是原始 TCP 字符流，不需要 Telnet 协议协商。
+
+UART 和 Wi-Fi 共用一份 ctshell，会话不会混合输入：有 Wi-Fi 客户端时由其
+独占命令交互，断开后返回 UART；此时 UART 按 Ctrl+C 可主动断开 Wi-Fi 客户端
+收回控制权。任一终端执行 `can topic echo` 都能持续输出；Wi-Fi 客户端断开
+也会停止 Echo。网络会话一次只允许一个客户端，CAN 收发继续运行在 CPU1。
+热点密码用于限制可执行 CAN 发送和文件操作的终端；请勿把端口转发到公网。
+
 ## Flash 文件与 CAN 配置
 
 已启用 ctshell 文件命令，通过应用的 POSIX/VFS 适配层访问 FATFS + 磨损均衡。

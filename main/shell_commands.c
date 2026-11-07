@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include "app_info.h"
 #include "can_bus.h"
+#include "wifi_console.h"
 #include "ctshell.h"
 #include "esp_chip_info.h"
 #include "esp_system.h"
@@ -53,3 +54,17 @@ static int command_info(int argc, char *argv[])
     return 0;
 }
 CTSHELL_EXPORT_SUBCMD(sys, info, command_info, "Show CPU, uptime and heap usage");
+
+CTSHELL_EXPORT_CMD(wifi, NULL, "Wi-Fi console", CTSHELL_ATTR_MENU);
+static int command_wifi_status(int argc,char *argv[])
+{
+    (void)argv;
+    if (argc!=1) { ctshell_printf("Usage: wifi status\r\n"); return 1; }
+    char ip[20];
+    wifi_console_ip(ip,sizeof(ip));
+    ctshell_printf("SoftAP: %s; SSID: AL1S-CAN; IP: %s; TCP port: 2323; client: %s\r\n",
+        wifi_console_ready()?"ready":"unavailable",ip,
+        wifi_console_connected()?"connected":"none");
+    return 0;
+}
+CTSHELL_EXPORT_SUBCMD(wifi,status,command_wifi_status,"Show hotspot and TCP console status");
